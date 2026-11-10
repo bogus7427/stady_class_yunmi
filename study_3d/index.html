@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D 초등 공부나라</title>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Jua', sans-serif; overflow: hidden; background: #0b1a3a; color: #222; }
+  #scene { position: fixed; inset: 0; }
+  #top {
+    position: fixed; top: 0; left: 0; right: 0; padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #fff; pointer-events: none; z-index: 5;
+  }
+  #top h1 { font-size: 26px; text-shadow: 0 2px 6px rgba(0,0,0,.5); }
+  #crumb { font-size: 18px; opacity: .9; }
+  #hint {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    color: #fff; background: rgba(0,0,0,.45); padding: 8px 18px; border-radius: 20px;
+    font-size: 16px; z-index: 5; text-align: center;
+  }
+  #backBtn { position: fixed; top: 60px; left: 20px; z-index: 6; display: none; }
+  button {
+    font-family: inherit; font-size: 17px; border: none; border-radius: 12px;
+    padding: 9px 18px; cursor: pointer; transition: transform .1s, filter .2s;
+  }
+  button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  .btn-main { background: #ffcc33; color: #333; box-shadow: 0 3px 0 #c9971a; }
+  .btn-ans  { background: #4caf50; color: #fff; box-shadow: 0 3px 0 #2e7d32; }
+  .btn-exp  { background: #2196f3; color: #fff; box-shadow: 0 3px 0 #1565c0; }
+  .btn-gray { background: #e0e0e0; color: #333; box-shadow: 0 3px 0 #aaa; }
+
+  #panel {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(.9);
+    width: min(1300px, calc(100% - 32px)); max-height: 94vh; overflow-y: auto;
+    background: #fffdf5; border-radius: 30px; padding: 40px 48px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); z-index: 10;
+    opacity: 0; pointer-events: none; transition: all .25s;
+  }
+  #panel.show { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+  #panel .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
+  #panel .tag { background: #ffe082; padding: 8px 20px; border-radius: 14px; font-size: 28px; }
+  #panel .count { color: #666; font-size: 26px; }
+  #levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .lv { font-size: 30px; padding: 14px 6px; background: #eee; color: #555; box-shadow: 0 3px 0 #bbb; }
+  .lv.on[data-lv="0"] { background: #8ce99a; color: #1b5e20; box-shadow: 0 3px 0 #51cf66; }
+  .lv.on[data-lv="1"] { background: #74c0fc; color: #0d47a1; box-shadow: 0 3px 0 #339af0; }
+  .lv.on[data-lv="2"] { background: #ffa94d; color: #7a3d00; box-shadow: 0 3px 0 #f76707; }
+  .lv.on[data-lv="3"] { background: #ff6b6b; color: #fff; box-shadow: 0 3px 0 #c92a2a; }
+  #qText { font-size: 40px; line-height: 1.55; margin: 10px 0 24px; white-space: pre-line; }
+  #choices { display: grid; gap: 14px; margin-bottom: 18px; }
+  .choice { text-align: left; background: #fff; border: 2px solid #ddd; box-shadow: none; font-size: 34px; padding: 16px 24px; border-width: 3px; }
+  .choice.correct { border-color: #4caf50; background: #e8f5e9; }
+  .choice.wrong { border-color: #f44336; background: #ffebee; }
+  .toggles { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .reveal {
+    position: relative; overflow: hidden; border-radius: 16px; font-size: 32px; white-space: pre-line;
+    line-height: 1.6; padding: 20px 28px; margin-bottom: 16px; min-height: 96px; cursor: pointer;
+  }
+  .reveal .content { filter: blur(8px); user-select: none; transition: filter .3s; }
+  .reveal .cover {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: repeating-linear-gradient(45deg, rgba(0,0,0,.08) 0 10px, rgba(0,0,0,.03) 10px 20px);
+    color: #555; font-size: 30px; transition: opacity .3s;
+  }
+  .reveal.open { cursor: default; }
+  .reveal.open .content { filter: none; user-select: auto; }
+  .reveal.open .cover { opacity: 0; pointer-events: none; }
+  #ansBox { background: #e8f5e9; border-left: 10px solid #4caf50; }
+  #expBox { background: #e3f2fd; border-left: 10px solid #2196f3; }
+  .nav { display: flex; justify-content: space-between; margin-top: 20px; gap: 14px; }
+  #panel .toggles button, #panel .nav button { font-size: 32px; padding: 16px 32px; border-radius: 18px; }
+  #feedback { font-size: 36px; min-height: 48px; margin-bottom: 8px; }
+  #dim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 9; display: none; }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="top">
+  <h1>🌈 3D 초등 공부나라</h1>
+  <div id="crumb">운동장 › 학년 교실 문 앞 발판으로 가요</div>
+</div>
+<button id="backBtn" class="btn-main">🏫 운동장으로</button>
+<div id="hint">⌨️ 방향키·WASD로 걷기 · 🖱️ 바닥 클릭으로 이동 · 드래그로 시점 회전</div>
+
+<div id="dim"></div>
+<div id="panel">
+  <div class="head">
+    <span class="tag" id="qTag"></span>
+    <span class="count" id="qCount"></span>
+  </div>
+  <div id="levels">
+    <button class="lv" data-lv="0">🌱 초급</button>
+    <button class="lv" data-lv="1">🌿 중급</button>
+    <button class="lv" data-lv="2">🌳 상급</button>
+    <button class="lv" data-lv="3">🔥 최상급</button>
+  </div>
+  <div id="qText"></div>
+  <div id="choices"></div>
+  <div id="feedback"></div>
+  <div class="toggles">
+    <button class="btn-ans" id="ansBtn">✅ 정답 보기</button>
+    <button class="btn-exp" id="expBtn">💡 해설 보기</button>
+  </div>
+  <div class="reveal" id="ansBox"></div>
+  <div class="reveal" id="expBox"></div>
+  <div class="nav">
+    <button class="btn-gray" id="prevBtn">◀ 이전</button>
+    <button class="btn-gray" id="closeBtn">닫기</button>
+    <button class="btn-main" id="nextBtn">새 문제 ▶</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =========================================================
+   🧩 문제 자동 생성 엔진
+   - 수학: 학년·난이도별 규칙으로 숫자를 무작위로 만들어 무한히 출제
+   - 그 밖의 과목: 개념 목록(POOLS)으로 난이도마다 출제 방식을 바꿈
+       초급  : 설명 → 개념 고르기
+       중급  : 개념 → 설명 고르기
+       상급  : 옳지 않은 설명 고르기
+       최상급: ㄱ·ㄴ·ㄷ 중 옳은 것을 모두 고르기
+   - 이미 나온 문제는 localStorage에 기록해서 다시 나오지 않음
+   ▶ 업그레이드: POOLS에 [개념, 설명]을 추가하거나 MATH에 규칙을 추가
+   ========================================================= */
+const LEVELS = ['초급', '중급', '상급', '최상급'];
+const rnd = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const shuffle = arr => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+const lcm = (a, b) => a / gcd(a, b) * b;
+const frac = (n, d) => { const g = gcd(n, d); n /= g; d /= g; return d === 1 ? `${n}` : `${n}/${d}`; };
+
+// 정답 + 오답 후보로 보기 4개 만들기
+function choices(answer, wrongs) {
+  const set = [String(answer)];
+  for (const w of shuffle(wrongs.map(String))) { if (set.length >= 4) break; if (!set.includes(w)) set.push(w); }
+  // 보기가 모자라면 정답 속 숫자를 조금씩 바꿔서 채움 (예: 92° → 93°, 91° …)
+  const m = String(answer).match(/^(\D*)(\d+(?:\.\d+)?)(.*)$/);
+  let k = 1; while (set.length < 4 && m && k < 50) { const v = m[1] + (Number(m[2]) + Math.ceil(k / 2) * (k % 2 ? 1 : -1)) + m[3]; if (!set.includes(v) && !v.includes('-')) set.push(v); k++; }
+  return shuffle(set);
+}
+// 숫자 정답의 오답 후보
+const near = (n, step = 1) => [n + step, n - step, n + 2 * step, n - 2 * step, n + 10, n - 10].filter(v => v >= 0);
+
+/* ---------------- 수학 규칙 (학년 → 난이도 → 유형들) ---------------- */
+const MATH = {
+  1: [
+    [() => { const a = rnd(1, 5), b = rnd(1, 4); return { q: `${a} + ${b} = ?`, a: a + b, w: near(a + b), e: `${a}에서 ${b}만큼 이어 세면 ${a + b}이에요.` }; },
+     () => { const a = rnd(3, 9), b = rnd(1, a - 1); return { q: `${a} - ${b} = ?`, a: a - b, w: near(a - b), e: `${a}개에서 ${b}개를 빼면 ${a - b}개가 남아요.` }; }],
+    [() => { const a = rnd(6, 9), b = rnd(3, 9); return { q: `${a} + ${b} = ?`, a: a + b, w: near(a + b), e: `${a}에 ${10 - a}을(를) 더해 10을 만들고, 남은 ${b - (10 - a)}을(를) 더하면 ${a + b}이에요.` }; },
+     () => { const a = rnd(11, 18), b = rnd(a - 9, 9); return { q: `${a} - ${b} = ?`, a: a - b, w: near(a - b), e: `${a}에서 ${a - 10}을(를) 빼서 10을 만들고, 남은 ${b - (a - 10)}을(를) 더 빼면 ${a - b}이에요.` }; }],
+    [() => { const a = rnd(11, 50), b = rnd(1, 9 - a % 10 || 1); return { q: `${a} + ${b} = ?`, a: a + b, w: near(a + b), e: `일의 자리끼리 더해요: ${a % 10} + ${b} = ${a % 10 + b} → ${a + b}` }; },
+     () => { const a = rnd(2, 5) * 10, b = rnd(1, 4) * 10; return { q: `${a} + ${b} = ?`, a: a + b, w: near(a + b, 10), e: `10이 ${a / 10}개와 ${b / 10}개면 10이 ${(a + b) / 10}개 → ${a + b}` }; }],
+    [() => { const a = rnd(2, 9), s = rnd(a + 1, 15); return { q: `□ + ${a} = ${s}\n□에 알맞은 수는?`, a: s - a, w: near(s - a), e: `□ = ${s} - ${a} = ${s - a}` }; },
+     () => { const n = pick(['사탕', '구슬', '딱지', '스티커']), a = rnd(8, 15), b = rnd(2, 7); return { q: `${n}이(가) ${a}개 있었어요. 동생에게 ${b}개를 주었어요.\n남은 ${n}은(는) 몇 개일까요?`, a: a - b, w: near(a - b).concat([a + b]), e: `준 것은 빼기! ${a} - ${b} = ${a - b}개` }; }]
+  ],
+  2: [
+    [() => { const a = rnd(15, 59), b = rnd(15, 39); return { q: `${a} + ${b} = ?`, a: a + b, w: near(a + b).concat([a + b - 10]), e: `일의 자리 ${a % 10}+${b % 10}, 받아올림을 잊지 말아요 → ${a + b}` }; },
+     () => { const a = rnd(41, 90), b = rnd(12, 39); return { q: `${a} - ${b} = ?`, a: a - b, w: near(a - b).concat([a - b + 10]), e: `받아내림에 주의해요 → ${a} - ${b} = ${a - b}` }; }],
+    [() => { const a = rnd(2, 5), b = rnd(2, 9); return { q: `${a} × ${b} = ?`, a: a * b, w: near(a * b, a), e: `${a}단: ${a}를 ${b}번 더해요 → ${a * b}` }; }],
+    [() => { const a = rnd(6, 9), b = rnd(3, 9); return { q: `${a} × ${b} = ?`, a: a * b, w: near(a * b, a).concat([a * b + 1]), e: `${a} × ${b} = ${a * b} (${a}단 구구단)` }; },
+     () => { const m = rnd(1, 4), c = rnd(10, 90); return { q: `${m}m ${c}cm는 몇 cm일까요?`, a: m * 100 + c, w: [m * 10 + c, m * 1000 + c, m * 100 + c + 10, m * 100 - c], e: `1m = 100cm 이므로 ${m}m = ${m * 100}cm, 더하면 ${m * 100 + c}cm` }; }],
+    [() => { const a = rnd(3, 9), b = rnd(3, 9), it = pick(['연필', '과자', '공책']); return { q: `한 상자에 ${it}이(가) ${a}개씩 들어 있어요.\n${b}상자에는 모두 몇 개일까요?`, a: a * b, w: near(a * b, a).concat([a + b]), e: `${a}개씩 ${b}묶음 → ${a} × ${b} = ${a * b}개` }; },
+     () => { const a = rnd(3, 9), r = rnd(3, 9); return { q: `□ × ${a} = ${a * r}\n□에 알맞은 수는?`, a: r, w: near(r), e: `${a}단에서 ${a * r}이 나오는 수를 찾아요 → ${r}` }; }]
+  ],
+  3: [
+    [() => { const a = rnd(120, 599), b = rnd(110, 399); return { q: `${a} + ${b} = ?`, a: a + b, w: near(a + b, 10).concat([a + b - 100]), e: `일·십·백의 자리 순서로 더하고 받아올림 → ${a + b}` }; },
+     () => { const a = rnd(500, 900), b = rnd(120, 480); return { q: `${a} - ${b} = ?`, a: a - b, w: near(a - b, 10).concat([a - b + 100]), e: `받아내림에 주의해서 빼요 → ${a - b}` }; }],
+    [() => { const a = rnd(12, 49), b = rnd(3, 9); return { q: `${a} × ${b} = ?`, a: a * b, w: near(a * b, b).concat([a * b + 10]), e: `${a} × ${b} = (${Math.floor(a / 10) * 10} × ${b}) + (${a % 10} × ${b}) = ${a * b}` }; },
+     () => { const b = rnd(3, 9), q = rnd(4, 12); return { q: `${b * q} ÷ ${b} = ?`, a: q, w: near(q), e: `${b} × ${q} = ${b * q} 이므로 몫은 ${q}` }; }],
+    [() => { const b = rnd(3, 9), q = rnd(4, 11), r = rnd(1, b - 1), n = b * q + r; return { q: `${n} ÷ ${b}의 몫과 나머지는?`, a: `몫 ${q}, 나머지 ${r}`, w: [`몫 ${q + 1}, 나머지 ${r}`, `몫 ${q}, 나머지 ${r + 1}`, `몫 ${q - 1}, 나머지 ${r + b}`, `몫 ${r}, 나머지 ${q}`], e: `${b} × ${q} = ${b * q}, ${n} - ${b * q} = ${r}\n나머지는 나누는 수 ${b}보다 작아야 해요.` }; },
+     () => { const d = pick([5, 6, 7, 8, 9, 10]), [x, y] = shuffle([...Array(d - 1)].map((_, i) => i + 1)).slice(0, 2), big = Math.max(x, y); return { q: `${x}/${d} 와 ${y}/${d} 중 더 큰 분수는?`, a: `${big}/${d}`, w: [`${Math.min(x, y)}/${d}`, '두 분수는 같다', `${big}/${d + 1}`, `${d}/${big}`], e: `분모가 같으면 분자가 큰 쪽이 더 커요 → ${big}/${d}` }; }],
+    [() => { const d = pick([2, 3, 4, 5, 6]), k = rnd(2, 6), n = rnd(1, d - 1), it = pick(['귤', '쿠키', '사탕']); return { q: `${it} ${d * k}개의 ${n}/${d}은(는) 몇 개일까요?`, a: k * n, w: near(k * n, k).concat([d * k - k * n]), e: `${d * k}개를 ${d}묶음으로 나누면 한 묶음에 ${k}개, ${n}묶음은 ${k * n}개` }; },
+     () => { const b = rnd(4, 8), q = rnd(5, 9), r = rnd(1, b - 1); return { q: `학생 ${b * q + r}명이 한 줄에 ${b}명씩 서요.\n남김없이 모두 서려면 최소 몇 줄이 필요할까요?`, a: q + 1, w: [q, q + 2, r, b], e: `${b * q + r} ÷ ${b} = ${q} … ${r}\n남은 ${r}명도 한 줄이 필요하므로 ${q + 1}줄` }; }]
+  ],
+  4: [
+    [() => { const a = rnd(120, 450), b = rnd(12, 45); return { q: `${a} × ${b} = ?`, a: a * b, w: near(a * b, 10).concat([a * b + 100, a * (b % 10)]), e: `${a} × ${b % 10} = ${a * (b % 10)}, ${a} × ${b - b % 10} = ${a * (b - b % 10)}\n더하면 ${a * b}` }; }],
+    [() => { const b = rnd(12, 35), q = rnd(6, 29), r = rnd(0, b - 1), n = b * q + r; return { q: `${n} ÷ ${b}의 몫은?`, a: q, w: near(q), e: `${b} × ${q} = ${b * q}${r ? `, 나머지 ${r}` : ''} → 몫 ${q}` }; }],
+    [() => { const d = rnd(5, 12), a = rnd(1, d - 2), b = rnd(1, d - 1 - a); return { q: `${a}/${d} + ${b}/${d} = ?`, a: `${a + b}/${d}`, w: [`${a + b}/${d * 2}`, `${a + b + 1}/${d}`, `${a * b}/${d}`, `${Math.abs(a - b)}/${d}`], e: `분모가 같으면 분자끼리 더해요: ${a} + ${b} = ${a + b} → ${a + b}/${d}` }; },
+     () => { const w = rnd(2, 4), d = rnd(3, 8), n = rnd(1, d - 1); return { q: `${w}과 ${n}/${d}을(를) 가분수로 나타내면?`, a: `${w * d + n}/${d}`, w: [`${w + n}/${d}`, `${w * n + d}/${d}`, `${w * d}/${d}`, `${w * d + n}/${d + 1}`], e: `${w} × ${d} + ${n} = ${w * d + n} → ${w * d + n}/${d}` }; }],
+    [() => { const a = rnd(30, 90), b = rnd(20, 150 - a); return { q: `삼각형의 두 각이 ${a}°, ${b}°일 때 나머지 한 각은?`, a: `${180 - a - b}°`, w: [`${360 - a - b}°`, `${180 - a - b + 10}°`, `${a + b}°`, `${90 - Math.min(a, 89)}°`], e: `삼각형 세 각의 합은 180° → 180 - ${a} - ${b} = ${180 - a - b}°` }; },
+     () => { const a = rnd(60, 120), b = rnd(60, 110), c = rnd(50, 100); return { q: `사각형의 세 각이 ${a}°, ${b}°, ${c}°일 때 나머지 한 각은?`, a: `${360 - a - b - c}°`, w: [`${180 - (a + b + c) % 180}°`, `${360 - a - b - c + 10}°`, `${360 - a - b - c - 10}°`, `${a}°`], e: `사각형 네 각의 합은 360° → 360 - ${a} - ${b} - ${c} = ${360 - a - b - c}°` }; }]
+  ],
+  5: [
+    [() => { const g = rnd(2, 6), a = g * rnd(2, 5), b = g * rnd(2, 7); return { q: `${a}와(과) ${b}의 최대공약수는?`, a: gcd(a, b), w: [lcm(a, b), gcd(a, b) * 2, 1, gcd(a, b) + 1], e: `두 수를 함께 나누는 가장 큰 수 → ${gcd(a, b)}` }; },
+     () => { const a = rnd(2, 9), b = rnd(3, 12); return { q: `${a}와(과) ${b}의 최소공배수는?`, a: lcm(a, b), w: [a * b === lcm(a, b) ? a * b + a : a * b, gcd(a, b), lcm(a, b) * 2, a + b], e: `${a}와 ${b}의 공통 배수 중 가장 작은 수 → ${lcm(a, b)}` }; }],
+    [() => { const [d1, d2] = shuffle([2, 3, 4, 5, 6]).slice(0, 2), n1 = rnd(1, d1 - 1), n2 = rnd(1, d2 - 1), L = lcm(d1, d2), N = n1 * L / d1 + n2 * L / d2; return { q: `${n1}/${d1} + ${n2}/${d2} = ?`, a: frac(N, L), w: [`${n1 + n2}/${d1 + d2}`, frac(N + 1, L), frac(N, L * 2), `${n1 * n2}/${d1 * d2}`], e: `통분: ${n1 * L / d1}/${L} + ${n2 * L / d2}/${L} = ${N}/${L}${frac(N, L) !== `${N}/${L}` ? ` = ${frac(N, L)}` : ''}` }; }],
+    [() => { const w = rnd(3, 15), h = rnd(3, 12); return { q: `가로 ${w}cm, 세로 ${h}cm인 직사각형의 넓이는?`, a: `${w * h}cm²`, w: [`${2 * (w + h)}cm²`, `${w * h + w}cm²`, `${w + h}cm²`, `${w * h - h}cm²`], e: `직사각형 넓이 = 가로 × 세로 = ${w} × ${h} = ${w * h}cm²` }; },
+     () => { const b = rnd(2, 10) * 2, h = rnd(3, 12); return { q: `밑변 ${b}cm, 높이 ${h}cm인 삼각형의 넓이는?`, a: `${b * h / 2}cm²`, w: [`${b * h}cm²`, `${b + h}cm²`, `${b * h / 2 + h}cm²`, `${(b + h) * 2}cm²`], e: `삼각형 넓이 = 밑변 × 높이 ÷ 2 = ${b} × ${h} ÷ 2 = ${b * h / 2}cm²` }; }],
+    [() => { const n = rnd(3, 5), avg = rnd(60, 90), arr = []; let s = 0; for (let i = 0; i < n - 1; i++) { const v = avg + rnd(-10, 10); arr.push(v); s += v; } arr.push(avg * n - s); return { q: `점수가 ${arr.join('점, ')}점일 때 평균은?`, a: `${avg}점`, w: [`${avg + 1}점`, `${avg - 2}점`, `${avg * n}점`, `${avg + 5}점`], e: `합계 ${avg * n} ÷ ${n} = ${avg}점` }; },
+     () => { const n = 4, avg = rnd(70, 90), a = [rnd(60, 95), rnd(60, 95), rnd(60, 95)], last = avg * n - a.reduce((x, y) => x + y); if (last < 0 || last > 100) return MATH[5][3][0](); return { q: `4번의 시험 평균을 ${avg}점으로 만들려면\n${a.join('점, ')}점 다음 시험에서 몇 점을 받아야 할까요?`, a: `${last}점`, w: [`${avg}점`, `${last + 4}점`, `${last - 4}점`, `${100 - last}점`], e: `필요한 합계 ${avg} × 4 = ${avg * 4}\n${avg * 4} - ${a.reduce((x, y) => x + y)} = ${last}점` }; }]
+  ],
+  6: [
+    [() => { const d = rnd(3, 9), n = rnd(1, d - 1), k = rnd(2, 5); return { q: `${n}/${d} ÷ ${k} = ?`, a: frac(n, d * k), w: [frac(n * k, d), frac(n, d + k), frac(n + k, d), frac(n, d * k + 1)], e: `${n}/${d} ÷ ${k} = ${n}/${d} × 1/${k} = ${frac(n, d * k)}` }; }],
+    [() => { const b = rnd(2, 9), q = rnd(11, 99) / 10, n = Math.round(b * q * 10) / 10; return { q: `${n} ÷ ${b} = ?`, a: q, w: [q * 10, Math.round((q + 0.1) * 10) / 10, Math.round(q * 100) / 1000, Math.round((q - 0.1) * 10) / 10], e: `${b} × ${q} = ${n} → ${q}` }; }],
+    [() => { const total = pick([200, 400, 500, 800, 1000, 1200]), p = pick([10, 20, 25, 30, 40, 50]); return { q: `${total}원의 ${p}%는 얼마일까요?`, a: `${total * p / 100}원`, w: [`${total * p / 10}원`, `${total - total * p / 100}원`, `${p}원`, `${total * p / 100 + 10}원`], e: `${total} × ${p}/100 = ${total * p / 100}원` }; },
+     () => { const a = rnd(2, 5), b = rnd(2, 7), k = rnd(2, 6); return { q: `${a} : ${b} = ${a * k} : □\n□에 알맞은 수는?`, a: b * k, w: near(b * k, k).concat([b + k]), e: `전항이 ${k}배 → 후항도 ${k}배: ${b} × ${k} = ${b * k}` }; }],
+    [() => { const r = rnd(2, 10); return { q: `반지름이 ${r}cm인 원의 넓이는? (원주율 3.14)`, a: `${+(r * r * 3.14).toFixed(2)}cm²`, w: [`${+(2 * r * 3.14).toFixed(2)}cm²`, `${+(r * 3.14).toFixed(2)}cm²`, `${+(4 * r * r * 3.14).toFixed(2)}cm²`, `${r * r}cm²`], e: `원의 넓이 = 반지름 × 반지름 × 3.14 = ${r} × ${r} × 3.14 = ${+(r * r * 3.14).toFixed(2)}cm²` }; },
+     () => { const a = rnd(2, 9), b = rnd(2, 9), c = rnd(2, 9); return { q: `가로 ${a}cm, 세로 ${b}cm, 높이 ${c}cm인 직육면체의 부피는?`, a: `${a * b * c}cm³`, w: [`${2 * (a * b + b * c + a * c)}cm³`, `${a + b + c}cm³`, `${a * b}cm³`, `${a * b * c + a}cm³`], e: `부피 = 가로 × 세로 × 높이 = ${a} × ${b} × ${c} = ${a * b * c}cm³` }; }]
+  ]
+};
+
+/* ---------------- 개념 목록 (계속 추가하면 문제가 늘어나요) ---------------- */
+// 형식: label(개념을 부르는 말), list: [개념, 설명]
+const POOLS = {
+  1: {
+    "국어": { label: "낱말", list: [["크다", "'작다'의 반대말"], ["길다", "'짧다'의 반대말"], ["높다", "'낮다'의 반대말"], ["많다", "'적다'의 반대말"], ["뜨겁다", "'차갑다'의 반대말"], ["무겁다", "'가볍다'의 반대말"], ["넓다", "'좁다'의 반대말"], ["빠르다", "'느리다'의 반대말"], ["밝다", "'어둡다'의 반대말"], ["깨끗하다", "'더럽다'의 반대말"]] },
+    "통합교과": { label: "것", list: [["봄", "새싹이 돋고 개나리가 피는 계절"], ["여름", "덥고 비가 많이 오는 계절"], ["가을", "단풍이 들고 곡식을 거두는 계절"], ["겨울", "눈이 오고 추운 계절"], ["초록불", "건널목을 건너도 되는 신호"], ["빨간불", "멈춰서 기다려야 하는 신호"], ["손 씻기", "밖에서 돌아오면 비누로 꼭 해야 하는 일"], ["인사", "어른을 만나면 고개 숙여 하는 예절"], ["태극기", "우리나라의 국기"]] }
+  },
+  2: {
+    "국어": { label: "흉내 내는 말", list: [["꽥꽥", "오리가 우는 소리"], ["멍멍", "강아지가 짖는 소리"], ["야옹", "고양이가 우는 소리"], ["개굴개굴", "개구리가 우는 소리"], ["깡충깡충", "토끼가 뛰는 모양"], ["엉금엉금", "거북이 느리게 기어가는 모양"], ["반짝반짝", "별이 빛나는 모양"], ["주룩주룩", "비가 많이 내리는 소리"], ["뒤뚱뒤뚱", "몸을 좌우로 흔들며 걷는 모양"]] },
+    "통합교과": { label: "것", list: [["곰", "겨울잠을 자는 몸집 큰 동물"], ["올챙이", "자라서 개구리가 되는 동물"], ["할머니", "아버지나 어머니의 어머니"], ["삼촌", "아버지의 남자 형제"], ["이모", "어머니의 여자 형제"], ["고모", "아버지의 여자 형제"], ["소방관", "불을 끄고 사람을 구하는 사람"], ["경찰관", "안전과 질서를 지키는 사람"], ["우체부", "편지와 소포를 배달하는 사람"]] }
+  },
+  3: {
+    "국어": { label: "높임말", list: [["진지", "'밥'의 높임말"], ["댁", "'집'의 높임말"], ["연세", "'나이'의 높임말"], ["말씀", "'말'의 높임말"], ["주무시다", "'자다'의 높임말"], ["계시다", "'있다'의 높임말"], ["드리다", "'주다'의 높임말"], ["편찮으시다", "'아프다'의 높임말"], ["께서", "'이/가'의 높임말"]] },
+    "사회": { label: "것", list: [["방위표", "지도에서 동서남북 방향을 알려 주는 표시"], ["지도", "땅의 모습을 줄여서 약속된 기호로 나타낸 그림"], ["문화유산", "조상이 남긴 소중한 유산"], ["박물관", "옛 물건과 역사 자료를 모아 보여 주는 곳"], ["시장", "물건을 사고파는 곳"], ["교통수단", "사람이나 물건을 옮기는 수단"], ["통신수단", "소식이나 정보를 전하는 수단"], ["옛이야기", "고장에 전해 내려오는 이야기"]] },
+    "과학": { label: "것", list: [["자석", "철로 된 물체를 끌어당기는 물체"], ["N극", "나침반에서 북쪽을 가리키는 자석의 극"], ["고체", "모양과 부피가 일정한 물질의 상태"], ["액체", "담는 그릇에 따라 모양이 변하는 물질의 상태"], ["기체", "공간을 가득 채우고 눈에 잘 보이지 않는 물질의 상태"], ["곤충", "몸이 머리·가슴·배로 나뉘고 다리가 6개인 동물"], ["완전 탈바꿈", "알-애벌레-번데기-어른벌레로 자라는 과정"], ["흙", "바위가 부서져 작은 알갱이가 된 것"]] },
+    "영어": { label: "영어 단어", list: [["apple", "사과"], ["dog", "개"], ["cat", "고양이"], ["book", "책"], ["red", "빨간색"], ["happy", "행복한"], ["water", "물"], ["school", "학교"], ["pencil", "연필"], ["friend", "친구"]] },
+    "도덕": { label: "마음/태도", list: [["배려", "다른 사람을 생각하고 도와주는 마음"], ["정직", "거짓 없이 바르고 곧은 마음"], ["성실", "정성스럽고 참되게 노력하는 태도"], ["효도", "부모님을 공경하고 잘 모시는 일"], ["약속", "다른 사람과 미리 정해 지키기로 한 것"], ["절제", "욕심을 줄이고 알맞게 조절하는 것"], ["예절", "사람 사이에 지켜야 할 바른 몸가짐"], ["우정", "친구 사이의 따뜻한 정"]] }
+  },
+  4: {
+    "국어": { label: "관용 표현", list: [["손이 크다", "씀씀이가 넉넉하다"], ["발이 넓다", "아는 사람이 많다"], ["귀가 얇다", "남의 말을 쉽게 믿는다"], ["입이 무겁다", "비밀을 잘 지킨다"], ["눈이 높다", "보는 수준이 높다"], ["간이 크다", "겁이 없고 대담하다"], ["손을 떼다", "하던 일을 그만두다"], ["발 벗고 나서다", "적극적으로 나서다"], ["입이 짧다", "음식을 가려 먹거나 적게 먹는다"]] },
+    "사회": { label: "것", list: [["축척", "실제 거리를 지도에 줄인 정도"], ["등고선", "높이가 같은 곳을 연결한 선"], ["범례", "지도에 쓰인 기호와 뜻을 모아 놓은 것"], ["촌락", "농촌·어촌·산지촌처럼 자연과 가까운 마을"], ["도시", "인구가 많고 건물이 밀집한 지역"], ["주민 참여", "주민이 지역 문제 해결에 참여하는 것"], ["공공 기관", "주민 모두를 위해 일하는 기관(시청, 소방서 등)"], ["희소성", "원하는 것에 비해 자원이 부족한 상태"]] },
+    "과학": { label: "것", list: [["뿌리", "물을 흡수하고 식물을 지탱하는 부분"], ["잎", "빛을 받아 양분을 만드는 부분"], ["증발", "물 표면에서 물이 수증기로 변하는 현상"], ["끓음", "물 속과 표면에서 물이 수증기로 변하는 현상"], ["응결", "수증기가 차가운 곳에서 물방울로 맺히는 현상"], ["그림자", "빛이 물체에 막혀 생기는 어두운 부분"], ["화석", "옛날 생물의 몸체나 흔적이 남은 것"], ["퇴적암", "자갈·모래·진흙이 쌓이고 굳어 만들어진 암석"]] },
+    "영어": { label: "영어 단어", list: [["Monday", "월요일"], ["Sunday", "일요일"], ["morning", "아침"], ["kitchen", "부엌"], ["teacher", "선생님"], ["doctor", "의사"], ["swim", "수영하다"], ["breakfast", "아침 식사"], ["hungry", "배고픈"], ["window", "창문"]] },
+    "도덕": { label: "개념", list: [["저작권", "창작자가 자기 작품에 대해 갖는 권리"], ["사이버 폭력", "인터넷에서 욕설·따돌림 등으로 괴롭히는 것"], ["공공장소", "여러 사람이 함께 쓰는 곳"], ["봉사", "대가 없이 남을 돕는 일"], ["용기", "옳은 일을 두려움 없이 해내는 마음"], ["감사", "고마움을 느끼고 표현하는 것"], ["협동", "서로 힘을 합쳐 함께 일하는 것"], ["존중", "다른 사람을 높이고 귀하게 여기는 것"]] }
+  },
+  5: {
+    "국어": { label: "표현 방법", list: [["직유법", "'~처럼, ~같이, ~듯'을 써서 직접 빗대는 방법"], ["은유법", "'A는 B이다'처럼 숨겨서 빗대는 방법"], ["의인법", "사람이 아닌 것을 사람처럼 나타내는 방법"], ["반복법", "같은 말을 되풀이해 강조하는 방법"], ["과장법", "실제보다 훨씬 크거나 작게 나타내는 방법"], ["토론", "찬성과 반대로 나뉘어 근거를 들어 논의하는 말하기"], ["요약", "글의 중요한 내용만 간추리는 것"], ["영탄법", "'아!', '오!'처럼 감탄으로 감정을 나타내는 방법"]] },
+    "사회": { label: "역사 개념", list: [["고조선", "단군왕검이 세운 우리나라 최초의 국가"], ["훈민정음", "세종대왕이 만든 우리 글자"], ["고려", "왕건이 세운 나라"], ["조선", "이성계가 세운 나라"], ["삼국", "고구려·백제·신라"], ["거북선", "이순신 장군이 임진왜란 때 사용한 배"], ["팔만대장경", "고려 때 불경을 새긴 목판"], ["첨성대", "신라 때 별을 관측하던 건축물"]] },
+    "과학": { label: "개념", list: [["산성", "푸른 리트머스 종이를 붉게 바꾸는 용액의 성질"], ["염기성", "붉은 리트머스 종이를 푸르게 바꾸는 용액의 성질"], ["온도", "물체가 차갑거나 따뜻한 정도를 숫자로 나타낸 것"], ["전도", "고체에서 열이 이동하는 방법"], ["대류", "액체나 기체에서 데워진 것이 위로 올라가며 열이 이동하는 방법"], ["세포", "생물을 이루는 가장 작은 단위"], ["태양계", "태양과 그 둘레를 도는 천체들"], ["용해", "물질이 물에 녹아 골고루 섞이는 현상"]] },
+    "영어": { label: "영어 단어", list: [["library", "도서관"], ["hospital", "병원"], ["yesterday", "어제"], ["weather", "날씨"], ["sunny", "맑은"], ["rainy", "비 오는"], ["delicious", "맛있는"], ["museum", "박물관"], ["vacation", "방학"], ["straight", "곧장, 똑바로"]] },
+    "도덕": { label: "개념", list: [["인권", "모든 사람이 태어날 때부터 누리는 기본 권리"], ["갈등", "서로 생각이 달라 부딪치는 것"], ["통일", "남과 북이 하나의 나라가 되는 것"], ["자주", "스스로 판단하고 행동하는 것"], ["정의", "사람이 마땅히 지켜야 할 올바른 도리"], ["공감", "다른 사람의 감정을 함께 느끼는 것"], ["책임", "맡은 일을 끝까지 해내는 것"], ["긍정", "어떤 일을 좋은 쪽으로 생각하는 태도"]] }
+  },
+  6: {
+    "국어": { label: "개념", list: [["논설문", "주장과 근거를 들어 읽는 사람을 설득하는 글"], ["서론", "글에서 문제를 제기하는 부분"], ["본론", "주장에 대한 근거를 드는 부분"], ["결론", "주장을 강조하며 정리하는 부분"], ["출처", "정보가 나온 곳"], ["매체", "정보를 전달하는 수단(신문, 방송, 인터넷 등)"], ["비유", "어떤 것을 다른 것에 빗대어 표현하는 것"], ["연설", "여러 사람 앞에서 자기 주장을 펼치는 말하기"]] },
+    "사회": { label: "개념", list: [["국회", "법을 만드는 기관(입법부)"], ["정부", "법에 따라 나라 살림을 하는 기관(행정부)"], ["법원", "법에 따라 재판하는 기관(사법부)"], ["삼권 분립", "나라의 권력을 셋으로 나누어 서로 견제하게 한 것"], ["헌법", "나라의 가장 기본이 되는 최고의 법"], ["선거", "국민이 대표를 뽑는 일"], ["납세의 의무", "국민이 세금을 내야 하는 의무"], ["국방의 의무", "국민이 나라를 지켜야 하는 의무"]] },
+    "과학": { label: "개념", list: [["자전", "지구가 스스로 도는 것, 낮과 밤이 생김"], ["공전", "지구가 태양 둘레를 도는 것, 계절이 바뀜"], ["광합성", "식물이 빛으로 양분을 만드는 과정"], ["증산 작용", "잎에서 물이 수증기로 빠져나가는 현상"], ["전기 회로", "전기가 흐르도록 전기 부품을 연결한 길"], ["연소", "물질이 산소와 반응해 빛과 열을 내는 현상"], ["볼록 렌즈", "가운데가 두꺼워 빛을 한 곳으로 모으는 렌즈"], ["이산화 탄소", "석회수를 뿌옇게 만드는 기체"]] },
+    "영어": { label: "영어 단어", list: [["future", "미래"], ["dream", "꿈"], ["scientist", "과학자"], ["taller", "더 키가 큰"], ["favorite", "가장 좋아하는"], ["environment", "환경"], ["borrow", "빌리다"], ["careful", "조심하는"], ["volunteer", "자원봉사자"], ["invent", "발명하다"]] },
+    "도덕": { label: "개념", list: [["공정", "모든 사람을 차별 없이 똑같이 대하는 것"], ["세계 시민", "지구촌 구성원으로서 책임을 다하는 사람"], ["평화", "다툼 없이 서로 존중하며 사는 상태"], ["자아 존중", "자기 자신을 소중히 여기는 마음"], ["다양성", "서로 다름을 인정하고 받아들이는 것"], ["나눔", "가진 것을 다른 사람과 함께하는 것"], ["생명 존중", "모든 생명을 소중히 여기는 것"], ["환경 보호", "자연을 아끼고 오염을 줄이는 것"]] }
+  }
+};
+const SUBJECTS = {
+  1: ["국어", "수학", "통합교과"], 2: ["국어", "수학", "통합교과"],
+  3: ["국어", "수학", "사회", "과학", "영어", "도덕"], 4: ["국어", "수학", "사회", "과학", "영어", "도덕"],
+  5: ["국어", "수학", "사회", "과학", "영어", "도덕"], 6: ["국어", "수학", "사회", "과학", "영어", "도덕"]
+};
+
+/* ---------------- 개념 목록으로 난이도별 문제 만들기 ---------------- */
+const TPL0 = [d => `'${d}'에 알맞은 것은?`, d => `다음 설명에 맞는 것을 고르세요.\n▶ ${d}`, d => `"${d}" — 이것은 무엇일까요?`];
+const TPL1 = [k => `'${k}'의 뜻(설명)으로 알맞은 것은?`, k => `다음 중 '${k}'을(를) 바르게 설명한 것은?`, k => `'${k}'에 대한 설명을 고르세요.`];
+
+function genPool(pool, lv) {
+  const L = pool.list;
+  if (lv === 0) { // 설명 → 개념
+    const [k, d] = pick(L), t = rnd(0, TPL0.length - 1);
+    return { q: TPL0[t](d), a: k, c: choices(k, L.filter(x => x[0] !== k).map(x => x[0])), e: `'${k}' : ${d}`, key: `0|${t}|${k}` };
+  }
+  if (lv === 1) { // 개념 → 설명
+    const [k, d] = pick(L), t = rnd(0, TPL1.length - 1);
+    return { q: TPL1[t](k), a: d, c: choices(d, L.filter(x => x[0] !== k).map(x => x[1])), e: `'${k}' : ${d}`, key: `1|${t}|${k}` };
+  }
+  if (lv === 2) { // 옳지 않은 것 고르기
+    const four = shuffle(L).slice(0, 4), bad = rnd(0, 3);
+    const others = L.filter(x => x[0] !== four[bad][0] && !four.some(f => f[1] === x[1]));
+    const wrongD = pick(others.length ? others : L.filter(x => x[0] !== four[bad][0]))[1];
+    const st = four.map((f, i) => `${f[0]} : ${i === bad ? wrongD : f[1]}`);
+    return { q: `다음 중 설명이 옳지 않은 것은?`, a: st[bad], c: st, e: `'${four[bad][0]}'의 바른 설명은\n→ ${four[bad][1]}\n('${wrongD}'은(는) 다른 개념의 설명이에요.)`, key: `2|${four.map(f => f[0]).join(',')}|${bad}` };
+  }
+  // 최상급: ㄱㄴㄷ 모두 고르기
+  const three = shuffle(L).slice(0, 3), marks = ['ㄱ', 'ㄴ', 'ㄷ'];
+  let truth; do { truth = three.map(() => Math.random() < 0.5); } while (!truth.some(Boolean));
+  const lines = three.map((f, i) => {
+    if (truth[i]) return { s: `${marks[i]}. ${f[0]} — ${f[1]}`, fix: null };
+    const wd = pick(L.filter(x => x[0] !== f[0]))[1];
+    return { s: `${marks[i]}. ${f[0]} — ${wd}`, fix: `${marks[i]}. ${f[0]}의 바른 설명: ${f[1]}` };
+  });
+  const combos = ['ㄱ', 'ㄴ', 'ㄷ', 'ㄱ, ㄴ', 'ㄱ, ㄷ', 'ㄴ, ㄷ', 'ㄱ, ㄴ, ㄷ'];
+  const ans = marks.filter((_, i) => truth[i]).join(', ');
+  const fixes = lines.filter(l => l.fix).map(l => '✗ ' + l.fix);
+  return {
+    q: `옳은 설명을 <보기>에서 모두 고른 것은?\n\n<보기>\n${lines.map(l => l.s).join('\n')}`,
+    a: ans, c: choices(ans, combos.filter(c => c !== ans)),
+    e: `옳은 것: ${ans}${fixes.length ? '\n' + fixes.join('\n') : ''}`,
+    key: `3|${three.map((f, i) => f[0] + (truth[i] ? 'T' : 'F')).join(',')}`
+  };
+}
+
+function genMath(g, lv) {
+  const raw = pick(MATH[g][lv])();
+  return { q: raw.q, a: String(raw.a), c: choices(raw.a, raw.w), e: raw.e, key: raw.q };
+}
+
+/* ---------------- 중복 방지 기록 ---------------- */
+const SEEN_KEY = 'study3d_seen_v1';
+let seen = {};
+try { seen = JSON.parse(localStorage.getItem(SEEN_KEY)) || {}; } catch (e) { seen = {}; }
+const saveSeen = () => { try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) {} };
+
+function makeQuestion(g, s, lv) {
+  const bucket = `${g}|${s}|${lv}`;
+  seen[bucket] = seen[bucket] || [];
+  let item, reset = false;
+  for (let tries = 0; tries < 80; tries++) {
+    item = s === '수학' ? genMath(g, lv) : genPool(POOLS[g][s], lv);
+    if (!seen[bucket].includes(item.key)) break;
+    item = null;
+  }
+  if (!item) { // 이 단계 문제를 모두 풀었으면 기록을 비우고 다시 시작
+    seen[bucket] = []; reset = true;
+    item = s === '수학' ? genMath(g, lv) : genPool(POOLS[g][s], lv);
+  }
+  seen[bucket].push(item.key); saveSeen();
+  item.reset = reset;
+  return item;
+}
+
+const SUBJECT_STYLE = {
+  "국어": { color: 0xff6b6b, icon: "📖" },
+  "수학": { color: 0x4dabf7, icon: "➗" },
+  "통합교과": { color: 0x69db7c, icon: "🌱" },
+  "사회": { color: 0xffa94d, icon: "🗺️" },
+  "과학": { color: 0x9775fa, icon: "🔬" },
+  "영어": { color: 0x3bc9db, icon: "🔤" },
+  "도덕": { color: 0xf783ac, icon: "💗" }
+};
+const GRADE_COLORS = [0xff8787, 0xffc078, 0xffe066, 0x8ce99a, 0x74c0fc, 0xb197fc];
+
+/* ================== 3D 학교 ================== */
+const container = document.getElementById('scene');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fd8ff);
+scene.fog = new THREE.Fog(0x9fd8ff, 70, 160);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 400);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x88aa66, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 120 });
+scene.add(sun, sun.target);
+
+const mat = c => new THREE.MeshLambertMaterial({ color: c });
+function box(w, h, d, c, x, y, z, parent = scene) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
+  m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
+}
+function makeLabel(text, bg = '#ffffff', fg = '#333', w = 256, h = 128, size = 60) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = bg;
+  const r = 30; ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.arcTo(w, 0, w, h, r); ctx.arcTo(w, h, 0, h, r);
+  ctx.arcTo(0, h, 0, 0, r); ctx.arcTo(0, 0, w, 0, r); ctx.fill();
+  ctx.fillStyle = fg; ctx.font = `${size}px Jua, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, h / 2 + 4);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv) }));
+  sp.scale.set(w / 85, h / 85, 1);
+  return sp;
+}
+function makePad(color, x, z, parent = scene) {
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.12, 32),
+    new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.5, transparent: true, opacity: 0.85 }));
+  pad.position.set(x, 0.07, z); parent.add(pad);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.08, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.1; pad.add(ring);
+  return pad;
+}
+const clickTargets = [];
+
+/* ----- 운동장 ----- */
+const yard = new THREE.Group(); scene.add(yard);
+const grass = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), mat(0x7cc96b));
+grass.rotation.x = -Math.PI / 2; grass.receiveShadow = true; yard.add(grass);
+const sand = new THREE.Mesh(new THREE.PlaneGeometry(64, 32), mat(0xe2c290));
+sand.rotation.x = -Math.PI / 2; sand.position.set(0, 0.02, 4); sand.receiveShadow = true; yard.add(sand);
+clickTargets.push(grass, sand);
+// 운동장 트랙 선
+const line = new THREE.Mesh(new THREE.RingGeometry(8.5, 8.8, 48), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+line.rotation.x = -Math.PI / 2; line.position.set(0, 0.03, 8); yard.add(line);
+
+// 학교 건물
+box(54, 11, 9, 0xf6e7c9, 0, 5.5, -18.5, yard);
+box(56, 1, 11, 0xb5513a, 0, 11.5, -18.5, yard);
+box(10, 4, 9.4, 0xf6e7c9, 0, 14, -18.5, yard);           // 시계탑
+box(11, 0.8, 10, 0xb5513a, 0, 16.4, -18.5, yard);
+const clock3d = new THREE.Mesh(new THREE.CircleGeometry(1.4, 32), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+clock3d.position.set(0, 14, -13.75); yard.add(clock3d);
+const signY = makeLabel('🏫 공부나라 초등학교', '#2e7d32', '#fff', 720, 120, 70);
+signY.position.set(0, 9.4, -13.4); yard.add(signY);
+for (let i = 0; i < 8; i++) box(3, 2.2, 0.2, 0x9ad4f5, -22.75 + i * 6.5, 7.4, -13.95, yard); // 2층 창문
+
+// 국기 게양대, 나무, 축구 골대
+box(0.2, 12, 0.2, 0xcccccc, -26, 6, 4, yard);
+const flag = new THREE.Mesh(new THREE.PlaneGeometry(3, 2), new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+flag.position.set(-24.5, 11, 4); yard.add(flag);
+function tree(x, z) {
+  box(0.7, 3, 0.7, 0x8d5a3b, x, 1.5, z, yard);
+  const top = new THREE.Mesh(new THREE.SphereGeometry(2.2, 14, 12), mat(0x3f9b4b));
+  top.position.set(x, 4.3, z); top.castShadow = true; yard.add(top);
+}
+[[-36, -8], [-36, 6], [-36, 18], [36, -8], [36, 6], [36, 18], [-20, 24], [20, 24], [0, 26]].forEach(p => tree(...p));
+[[-22, 8], [22, 8]].forEach(([x, z]) => {
+  const s = Math.sign(x);
+  box(0.25, 2.4, 0.25, 0xffffff, x, 1.2, z - 2.5, yard); box(0.25, 2.4, 0.25, 0xffffff, x, 1.2, z + 2.5, yard);
+  box(0.25, 0.25, 5.2, 0xffffff, x, 2.4, z, yard);
+  box(0.1, 2.3, 5, 0xdddddd, x + s * 1.2, 1.2, z, yard).material.transparent = true;
+});
+
+// 학년 교실 문 + 이동 발판
+const yardPads = [];
+for (let g = 1; g <= 6; g++) {
+  const x = -20 + (g - 1) * 8;
+  box(3.4, 4.8, 0.4, GRADE_COLORS[g - 1], x, 2.4, -13.9, yard);
+  box(0.3, 0.3, 0.3, 0xffd54f, x + 1.1, 2.3, -13.6, yard);
+  const lab = makeLabel(`${g}학년`, '#ffffff', '#333', 256, 110, 64);
+  lab.position.set(x, 5.8, -13.3); yard.add(lab);
+  const pad = makePad(GRADE_COLORS[g - 1], x, -11, yard);
+  yardPads.push({ type: 'grade', grade: g, mesh: pad, pos: new THREE.Vector3(x, 0, -11) });
+  clickTargets.push(pad);
+}
+
+/* ----- 교실 (멀리 떨어진 곳에 하나를 두고 학년마다 다시 꾸밈) ----- */
+const CLASS_ORIGIN = new THREE.Vector3(400, 0, 0);
+const classroom = new THREE.Group(); classroom.position.copy(CLASS_ORIGIN); scene.add(classroom);
+let classPads = [], classFloor = null;
+const STATION_POS = {
+  3: [[-8, -6], [0, -8], [8, -6]],
+  6: [[-9, -6.5], [-3, -8], [3, -8], [9, -6.5], [-11.5, 1.5], [11.5, 1.5]]
+};
+
+function buildClassroom(g) {
+  while (classroom.children.length) classroom.remove(classroom.children[0]);
+  const ci = clickTargets.indexOf(classFloor); if (ci > -1) clickTargets.splice(ci, 1);
+  classPads.forEach(p => { const i = clickTargets.indexOf(p.mesh); if (i > -1) clickTargets.splice(i, 1); });
+  classPads = [];
+
+  classFloor = box(32, 0.2, 26, 0xd7a86e, 0, -0.1, 0, classroom);
+  clickTargets.push(classFloor);
+  const wallC = 0xfff3e0;
+  box(32, 9, 0.4, wallC, 0, 4.5, -13, classroom);
+  box(0.4, 9, 26, wallC, -16, 4.5, 0, classroom);
+  box(0.4, 9, 26, wallC, 16, 4.5, 0, classroom);
+  box(32, 1.2, 0.5, GRADE_COLORS[g - 1], 0, 0.6, -12.9, classroom);   // 걸레받이 색
+  box(14, 4, 0.2, 0x2f5d3a, 0, 5.6, -12.7, classroom);                 // 칠판
+  const t = makeLabel(`${g}학년 교실`, '#2f5d3a', '#fff', 420, 110, 64);
+  t.position.set(0, 6.4, -12.4); classroom.add(t);
+  const t2 = makeLabel('과목 발판에 올라가면 문제가 나와요', '#2f5d3a', '#ffeb3b', 640, 80, 40);
+  t2.position.set(0, 4.8, -12.4); t2.scale.multiplyScalar(0.8); classroom.add(t2);
+  for (let i = 0; i < 4; i++) { box(0.2, 3, 4, 0x9ad4f5, -15.8, 5, -8 + i * 6, classroom); box(0.2, 3, 4, 0x9ad4f5, 15.8, 5, -8 + i * 6, classroom); }
+
+  // 책상과 의자 (꾸미기)
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) {
+    const x = -6 + c * 4, z = -1 + r * 3.6;
+    box(2.2, 0.15, 1.4, 0xc58b4f, x, 1.5, z, classroom);
+    box(0.15, 1.5, 0.15, 0x777777, x - 0.9, 0.75, z, classroom); box(0.15, 1.5, 0.15, 0x777777, x + 0.9, 0.75, z, classroom);
+    box(1.2, 0.12, 1, 0x4dabf7, x, 0.9, z + 1.3, classroom);
+  }
+
+  // 과목 스테이션
+  const subs = SUBJECTS[g], spots = STATION_POS[subs.length];
+  subs.forEach((s, i) => {
+    const [x, z] = spots[i], st = SUBJECT_STYLE[s];
+    const stand = new THREE.Group(); stand.position.set(x, 0, z); classroom.add(stand);
+    box(3.4, 2.4, 0.3, st.color, 0, 2.6, 0, stand);
+    box(0.2, 1.4, 0.2, 0x666666, 0, 0.7, 0, stand);
+    stand.lookAt(CLASS_ORIGIN.x, 0, CLASS_ORIGIN.z + 3);
+    const lab = makeLabel(`${st.icon} ${s}`, '#ffffff', '#333', 320, 110, 56);
+    lab.position.set(x, 4.6, z); classroom.add(lab);
+    const toC = new THREE.Vector2(-x, 3 - z).normalize().multiplyScalar(2.6);
+    const px = x + toC.x, pz = z + toC.y;
+    const pad = makePad(st.color, px, pz, classroom);
+    classPads.push({ type: 'subject', subject: s, mesh: pad, pos: new THREE.Vector3(px, 0, pz).add(CLASS_ORIGIN) });
+    clickTargets.push(pad);
+  });
+
+  // 나가는 문
+  box(3.4, 4.8, 0.4, 0x8d6e63, 0, 2.4, 12.8, classroom);
+  const ex = makeLabel('🚪 운동장으로', '#ffffff', '#333', 360, 100, 52);
+  ex.position.set(0, 5.6, 12.4); classroom.add(ex);
+  const exitPad = makePad(0xbdbdbd, 0, 10.5, classroom);
+  classPads.push({ type: 'exit', mesh: exitPad, pos: new THREE.Vector3(0, 0, 10.5).add(CLASS_ORIGIN) });
+  clickTargets.push(exitPad);
+}
+
+/* ----- 아바타 ----- */
+const avatar = new THREE.Group(); scene.add(avatar);
+function limb(w, h, d, c, x, y) {
+  const pivot = new THREE.Group(); pivot.position.set(x, y, 0);
+  const m = box(w, h, d, c, 0, -h / 2, 0, pivot); avatar.add(pivot); return pivot;
+}
+const legL = limb(0.42, 1.0, 0.42, 0x3949ab, -0.25, 1.0), legR = limb(0.42, 1.0, 0.42, 0x3949ab, 0.25, 1.0);
+const bodyM = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 1.3, 16), mat(0xff7043));
+bodyM.position.y = 1.65; bodyM.castShadow = true; avatar.add(bodyM);
+const armL = limb(0.28, 1.0, 0.28, 0xff7043, -0.75, 2.2), armR = limb(0.28, 1.0, 0.28, 0xff7043, 0.75, 2.2);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.6, 20, 16), mat(0xffd7b0));
+head.position.y = 2.85; head.castShadow = true; avatar.add(head);
+const hair = new THREE.Mesh(new THREE.SphereGeometry(0.63, 20, 16, 0, Math.PI * 2, 0, Math.PI / 2.1), mat(0x4e342e));
+hair.position.y = 2.9; avatar.add(hair);
+[-0.22, 0.22].forEach(x => { const e = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), mat(0x222222)); e.position.set(x, 2.9, 0.53); avatar.add(e); });
+const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.03, 6, 12, Math.PI), mat(0xc0392b));
+mouth.position.set(0, 2.68, 0.55); mouth.rotation.z = Math.PI; avatar.add(mouth);
+box(0.9, 1.0, 0.4, 0x1e88e5, 0, 1.8, -0.6, avatar);   // 책가방
+const me = makeLabel('나', '#ffcc33', '#333', 128, 80, 48); me.position.y = 4; me.scale.multiplyScalar(0.7); avatar.add(me);
+avatar.position.set(0, 0, 8);
+
+/* ----- 이동 / 카메라 ----- */
+let area = 'yard', curGrade = null, lastGrade = 1, activePad = null;
+let camYaw = 0, camYawT = 0, moveTarget = null, walkT = 0;
+const keys = {};
+const BOUNDS = { yard: [-32, 32, -12.8, 22], class: [-14.5, 14.5, -11, 11.5] };
+
+addEventListener('keydown', e => {
+  if (panel.classList.contains('show')) return;
+  keys[e.key.toLowerCase()] = true;
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+let dragging = false, lastX = 0, moved = 0;
+renderer.domElement.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; moved = 0; });
+addEventListener('pointerup', e => { const was = dragging; dragging = false; if (was && moved < 6) onClick(e); });
+addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX; lastX = e.clientX; moved += Math.abs(dx);
+  camYawT -= dx * 0.008;
+});
+
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+function onClick(e) {
+  if (panel.classList.contains('show') || e.target !== renderer.domElement) return;
+  mouse.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(clickTargets, false)[0];
+  if (!hit) return;
+  const pad = [...yardPads, ...classPads].find(p => p.mesh === hit.object);
+  moveTarget = pad ? pad.pos.clone() : hit.point.clone().setY(0);
+}
+
+function snapCamera() {
+  curLook.copy(avatar.position).add(new THREE.Vector3(0, 2, 0));
+  camera.position.set(avatar.position.x + Math.sin(camYaw) * 13, avatar.position.y + 8, avatar.position.z + Math.cos(camYaw) * 13);
+}
+
+function enterGrade(g) {
+  area = 'class'; curGrade = g; lastGrade = g; moveTarget = null;
+  buildClassroom(g);
+  avatar.position.copy(CLASS_ORIGIN).add(new THREE.Vector3(0, 0, 7.5));
+  avatar.rotation.y = Math.PI;
+  camYaw = camYawT = 0; activePad = null; snapCamera();
+  document.getElementById('crumb').textContent = `${g}학년 교실 › 과목 발판으로 걸어가요`;
+  document.getElementById('backBtn').style.display = 'block';
+}
+function goYard() {
+  area = 'yard'; curGrade = null; moveTarget = null;
+  const door = yardPads[lastGrade - 1].pos;
+  avatar.position.set(door.x, 0, door.z + 3.5); avatar.rotation.y = 0;
+  camYaw = camYawT = 0; activePad = null; snapCamera();
+  document.getElementById('crumb').textContent = '운동장 › 학년 교실 문 앞 발판으로 가요';
+  document.getElementById('backBtn').style.display = 'none';
+}
+document.getElementById('backBtn').onclick = goYard;
+
+function triggerPad(p) {
+  moveTarget = null; for (const k in keys) keys[k] = false;
+  if (p.type === 'grade') enterGrade(p.grade);
+  else if (p.type === 'subject') openQuiz(curGrade, p.subject);
+  else if (p.type === 'exit') goYard();
+}
+
+const curLook = new THREE.Vector3();
+function updateAvatar(dt, t) {
+  const busy = panel.classList.contains('show');
+  let dx = 0, dz = 0;
+  if (!busy) {
+    const f = (keys['w'] || keys['arrowup'] ? 1 : 0) - (keys['s'] || keys['arrowdown'] ? 1 : 0);
+    const r = (keys['d'] || keys['arrowright'] ? 1 : 0) - (keys['a'] || keys['arrowleft'] ? 1 : 0);
+    if (f || r) {
+      moveTarget = null;
+      const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);
+      dx = fx * f + (-fz) * r; dz = fz * f + fx * r;
+    } else if (moveTarget) {
+      dx = moveTarget.x - avatar.position.x; dz = moveTarget.z - avatar.position.z;
+      if (Math.hypot(dx, dz) < 0.15) { moveTarget = null; dx = dz = 0; }
+    }
+  }
+  const len = Math.hypot(dx, dz), walking = len > 0;
+  if (walking) {
+    const step = Math.min(9 * dt, moveTarget ? len : Infinity);
+    avatar.position.x += dx / len * step; avatar.position.z += dz / len * step;
+    const want = Math.atan2(dx, dz);
+    let diff = want - avatar.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    avatar.rotation.y += diff * Math.min(1, dt * 12);
+    walkT += dt * 11;
+  } else walkT *= 0.85;
+  // 이동 범위 제한
+  const b = BOUNDS[area], o = area === 'class' ? CLASS_ORIGIN : new THREE.Vector3();
+  avatar.position.x = Math.max(o.x + b[0], Math.min(o.x + b[1], avatar.position.x));
+  avatar.position.z = Math.max(o.z + b[2], Math.min(o.z + b[3], avatar.position.z));
+  // 걷는 동작
+  const sw = Math.sin(walkT) * (walking ? 0.7 : 0);
+  legL.rotation.x = sw; legR.rotation.x = -sw; armL.rotation.x = -sw; armR.rotation.x = sw;
+  avatar.position.y = walking ? Math.abs(Math.sin(walkT)) * 0.12 : 0;
+
+  // 발판 확인 (발판을 벗어났다가 다시 올라가야 다시 작동)
+  const pads = area === 'yard' ? yardPads : classPads;
+  const on = pads.find(p => Math.hypot(p.pos.x - avatar.position.x, p.pos.z - avatar.position.z) < 1.5);
+  if (on && on !== activePad && !busy) { activePad = on; triggerPad(on); }
+  else if (!on) activePad = null;
+  pads.forEach((p, i) => { p.mesh.material.emissiveIntensity = 0.35 + Math.sin(t * 3 + i) * 0.25; });
+
+  // 카메라 따라가기
+  camYaw += (camYawT - camYaw) * 0.12;
+  const look = avatar.position.clone().setY(2);
+  curLook.lerp(look, 0.15);
+  const camWant = new THREE.Vector3(avatar.position.x + Math.sin(camYaw) * 13, 8, avatar.position.z + Math.cos(camYaw) * 13);
+  camera.position.lerp(camWant, 0.1);
+  camera.lookAt(curLook);
+  sun.position.set(avatar.position.x + 15, 30, avatar.position.z + 12);
+  sun.target.position.copy(avatar.position);
+}
+snapCamera();
+
+/* ================== 문제 패널 ================== */
+const panel = document.getElementById('panel'), dim = document.getElementById('dim');
+const ansBox = document.getElementById('ansBox'), expBox = document.getElementById('expBox');
+const ansBtn = document.getElementById('ansBtn'), expBtn = document.getElementById('expBtn');
+let qGrade, qSubj, qLevel = 0, history = [], hIdx = -1, score = { ok: 0, tried: 0 };
+
+function openQuiz(g, s) {
+  qGrade = g; qSubj = s; history = []; hIdx = -1; score = { ok: 0, tried: 0 };
+  setLevel(qLevel);
+  panel.classList.add('show'); dim.style.display = 'block';
+}
+function closeQuiz() { panel.classList.remove('show'); dim.style.display = 'none'; }
+
+function setLevel(lv) {
+  qLevel = lv;
+  document.querySelectorAll('.lv').forEach(b => b.classList.toggle('on', +b.dataset.lv === lv));
+  newQuestion();
+}
+document.querySelectorAll('.lv').forEach(b => b.onclick = () => setLevel(+b.dataset.lv));
+
+function newQuestion() {
+  const item = makeQuestion(qGrade, qSubj, qLevel);
+  item.level = qLevel; item.picked = null;
+  history = history.slice(0, hIdx + 1); history.push(item); hIdx = history.length - 1;
+  renderQ();
+}
+
+function setReveal(box, btn, open, labelOn, labelOff) {
+  box.classList.toggle('open', open);
+  btn.textContent = open ? labelOff : labelOn;
+}
+
+function renderQ() {
+  const item = history[hIdx];
+  document.getElementById('qTag').textContent = `${qGrade}학년 · ${SUBJECT_STYLE[qSubj].icon} ${qSubj} · ${LEVELS[item.level]}`;
+  document.getElementById('qCount').textContent = `${hIdx + 1}번째 문제 · 맞힘 ${score.ok}/${score.tried}`;
+  document.getElementById('qText').textContent = `Q${hIdx + 1}. ${item.q}`;
+  const fb = document.getElementById('feedback');
+  fb.textContent = item.reset ? '🔄 이 단계 문제를 모두 풀어서 처음부터 다시 섞었어요!' : '';
+  ansBox.innerHTML = `<div class="content"><b>정답:</b> ${item.a}</div><div class="cover">🔒 정답이 가려져 있어요 · [정답 보기]를 눌러요</div>`;
+  expBox.innerHTML = `<div class="content"><b>해설:</b> ${item.e}</div><div class="cover">🔒 해설이 가려져 있어요 · [해설 보기]를 눌러요</div>`;
+  setReveal(ansBox, ansBtn, false, '✅ 정답 보기', '🙈 정답 가리기');
+  setReveal(expBox, expBtn, false, '💡 해설 보기', '🙈 해설 가리기');
+
+  const ch = document.getElementById('choices'); ch.innerHTML = '';
+  item.c.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'choice'; b.textContent = `${'①②③④⑤'[i]} ${c}`;
+    if (item.picked === c) b.classList.add(c === item.a ? 'correct' : 'wrong');
+    b.onclick = () => {
+      if (item.picked === null) { score.tried++; if (c === item.a) score.ok++; }
+      item.picked = c;
+      ch.querySelectorAll('.choice').forEach(x => x.classList.remove('correct', 'wrong'));
+      const ok = c === item.a;
+      b.classList.add(ok ? 'correct' : 'wrong');
+      fb.textContent = ok ? '🎉 정답이에요! 잘했어요!' : '🤔 다시 생각해 볼까요?';
+      document.getElementById('qCount').textContent = `${hIdx + 1}번째 문제 · 맞힘 ${score.ok}/${score.tried}`;
+    };
+    ch.appendChild(b);
+  });
+  document.getElementById('prevBtn').disabled = hIdx === 0;
+  document.getElementById('nextBtn').textContent = hIdx < history.length - 1 ? '다음 ▶' : '새 문제 ▶';
+}
+
+ansBtn.onclick = () => setReveal(ansBox, ansBtn, !ansBox.classList.contains('open'), '✅ 정답 보기', '🙈 정답 가리기');
+expBtn.onclick = () => setReveal(expBox, expBtn, !expBox.classList.contains('open'), '💡 해설 보기', '🙈 해설 가리기');
+ansBox.onclick = () => { if (!ansBox.classList.contains('open')) ansBtn.onclick(); };
+expBox.onclick = () => { if (!expBox.classList.contains('open')) expBtn.onclick(); };
+document.getElementById('prevBtn').onclick = () => { if (hIdx > 0) { hIdx--; renderQ(); } };
+document.getElementById('nextBtn').onclick = () => { if (hIdx < history.length - 1) { hIdx++; renderQ(); } else newQuestion(); };
+document.getElementById('closeBtn').onclick = closeQuiz;
+dim.onclick = closeQuiz;
+
+/* ================== 애니메이션 ================== */
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  updateAvatar(dt, t);
+  flag.rotation.y = Math.sin(t * 2) * 0.15;
+  renderer.render(scene, camera);
+}
+animate();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
